@@ -4,12 +4,11 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/fcntl.h>
 #include <unistd.h>
+
 
 
 struct options
@@ -28,8 +27,10 @@ struct options
 static void options_init(struct options *opts);
 static void parse_arguments(int argc, char *argv[], struct options *opts);
 static void options_process(struct options *opts);
+static void open_input_file(struct options *opts);
+static void open_input_socket(struct options *opts);
+static void open_output_socket(struct options *opts);
 static void cleanup(const struct options *opts);
-
 
 #define BUF_SIZE 1024
 #define DEFAULT_PORT 5000
@@ -109,7 +110,6 @@ static void parse_arguments(int argc, char *argv[], struct options *opts)
     }
 }
 
-
 static void options_process(struct options *opts)
 {
     if(opts->file_name && opts->ip_in)
@@ -119,88 +119,103 @@ static void options_process(struct options *opts)
 
     if(opts->file_name)
     {
-        opts->fd_in = open(opts->file_name, O_RDONLY);
-
-        if(opts->fd_in == -1)
-        {
-            fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
-        }
+        open_input_file(opts);
     }
 
     if(opts->ip_in)
     {
-        struct sockaddr_in addr;
-        int result;
-        int option;
-
-        opts->fd_in2 = socket(AF_INET, SOCK_STREAM, 0);
-
-        if(opts->fd_in2 == -1)
-        {
-            fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
-        }
-
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(opts->port_in);
-        addr.sin_addr.s_addr = inet_addr(opts->ip_in);
-
-        if(addr.sin_addr.s_addr ==  (in_addr_t)-1)
-        {
-            fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
-        }
-
-        option = 1;
-        setsockopt(opts->fd_in2, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
-
-        result = bind(opts->fd_in2, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
-
-        if(result == -1)
-        {
-            fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
-        }
-
-        result = listen(opts->fd_in2, BACKLOG);
-
-        if(result == -1)
-        {
-            fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
-        }
-
-        opts->fd_in = accept(opts->fd_in2, NULL, 0);
-
-        if(opts->fd_in == -1)
-        {
-            fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
-        }
+        open_input_socket(opts);
     }
 
     if(opts->ip_out)
     {
-        int result;
-        struct sockaddr_in addr;
+        open_output_socket(opts);
+    }
+}
 
-        opts->fd_out = socket(AF_INET, SOCK_STREAM, 0);
+static void open_input_file(struct options *opts)
+{
+    opts->fd_in = open(opts->file_name, O_RDONLY);
 
-        if(opts->fd_out == -1)
-        {
-            fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
-        }
+    if(opts->fd_in == -1)
+    {
+        fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
+    }
+}
 
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(opts->port_out);
-        addr.sin_addr.s_addr = inet_addr(opts->ip_out);
+static void open_output_socket(struct options *opts)
+{
+    int result;
+    struct sockaddr_in addr;
 
-        if(addr.sin_addr.s_addr ==  (in_addr_t)-1)
-        {
-            fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
-        }
+    opts->fd_out = socket(AF_INET, SOCK_STREAM, 0);
 
-        result = connect(opts->fd_out, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
+    if(opts->fd_out == -1)
+    {
+        fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
+    }
 
-        if(result == -1)
-        {
-            fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
-        }
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(opts->port_out);
+    addr.sin_addr.s_addr = inet_addr(opts->ip_out);
+
+    if(addr.sin_addr.s_addr ==  (in_addr_t)-1)
+    {
+        fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
+    }
+
+    result = connect(opts->fd_out, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
+
+    if(result == -1)
+    {
+        fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
+    }
+}
+
+static void open_input_socket(struct options *opts)
+{
+    struct sockaddr_in addr;
+    int result;
+    int option;
+
+    opts->fd_in2 = socket(AF_INET, SOCK_STREAM, 0);
+
+    if(opts->fd_in2 == -1)
+    {
+        fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
+    }
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(opts->port_in);
+    addr.sin_addr.s_addr = inet_addr(opts->ip_in);
+
+    if(addr.sin_addr.s_addr ==  (in_addr_t)-1)
+    {
+        fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
+    }
+
+    option = 1;
+    setsockopt(opts->fd_in2, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
+
+    result = bind(opts->fd_in2, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
+
+    if(result == -1)
+    {
+        fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
+    }
+
+    result = listen(opts->fd_in2, BACKLOG);
+
+    if(result == -1)
+    {
+        fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
+    }
+
+    opts->fd_in = accept(opts->fd_in2, NULL, 0);
+
+    if(opts->fd_in == -1)
+    {
+        fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
     }
 }
 

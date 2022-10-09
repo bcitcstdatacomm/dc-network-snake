@@ -24,6 +24,7 @@ add_compile_definitions(_XOPEN_SOURCE=700)
 
 if (APPLE)
     add_definitions(-D_DARWIN_C_SOURCE)
+    include_directories(/usr/local/include)
 endif ()
 
 include_directories(${INCLUDE_DIR})

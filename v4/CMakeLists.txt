@@ -10,9 +10,11 @@ set(CMAKE_C_STANDARD 17)
 set(SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 set(INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)
 set(SOURCE_LIST ${SOURCE_DIR}/main.c
+        ${SOURCE_DIR}/conversion.c
         ${SOURCE_DIR}/copy.c
         ${SOURCE_DIR}/error.c)
-set(HEADER_LIST ${INCLUDE_DIR}/copy.h
+set(HEADER_LIST ${INCLUDE_DIR}/conversion.h
+        ${INCLUDE_DIR}/copy.h
         ${INCLUDE_DIR}/error.h)
 
 set(SANITIZE TRUE)
@@ -130,6 +132,7 @@ set(CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS},-bugprone-easily-swappable-parameter
 set(CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS},-android-cloexec-open")
 set(CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS},-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling")
 set(CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS},-android-cloexec-accept")
+set(CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS},-android-cloexec-socket")
 set(CMAKE_C_CLANG_TIDY clang-tidy -checks=${CLANG_TIDY_CHECKS};--quiet)
 
 add_executable(dc-network-snake ${SOURCE_LIST})

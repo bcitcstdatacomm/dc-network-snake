@@ -1,5 +1,5 @@
-#ifndef V4_CONVERSION_H
-#define V4_CONVERSION_H
+#ifndef DC_NETWORK_SNAKE_CONVERSION_H
+#define DC_NETWORK_SNAKE_CONVERSION_H
 
 
 #include <netinet/in.h>
@@ -9,4 +9,4 @@ in_port_t parse_port(const char *buff, int radix);
 size_t parse_size_t(const char *buff, int radix);
 
 
-#endif //V4_CONVERSION_H
+#endif //DC_NETWORK_SNAKE_CONVERSION_H
