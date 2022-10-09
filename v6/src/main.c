@@ -30,7 +30,7 @@ struct options
 };
 
 
-static _Noreturn void usage(const struct dc_posix_env *env, const char *binary_path);
+static _Noreturn void usage(const struct dc_posix_env *env, struct dc_error *err, const char *binary_path);
 static void options_init(const struct dc_posix_env *env, struct options *opts);
 static void parse_arguments(const struct dc_posix_env *env, struct dc_error *err, int argc, char *argv[], struct options *opts);
 static void options_process(const struct dc_posix_env *env, struct dc_error *err, struct options *opts);
@@ -57,7 +57,6 @@ int main(int argc, char *argv[])
     struct dc_error err;
     struct options opts;
     struct sigaction sa;
-    int exit_code;
 
     dc_posix_env_init(&env, NULL);
 //    dc_posix_env_init(&env, dc_posix_default_tracer);
@@ -71,7 +70,7 @@ int main(int argc, char *argv[])
 
     if(opts.show_help)
     {
-        usage(&env, argv[0]);
+        usage(&env, &err, argv[0]);
     }
 
     options_process(&env, &err, &opts);
@@ -111,46 +110,42 @@ static void handle_client(const struct dc_posix_env *env, struct dc_error *err, 
         in_port_t accept_port;
 
         accept_addr_len = sizeof(accept_addr);
-        fd = dc_accept(&env, &err, opts.fd_in, (struct sockaddr *)&accept_addr, &accept_addr_len);
+        fd = dc_accept(env, err, opts->fd_in, (struct sockaddr *)&accept_addr, &accept_addr_len);
 
-        if(dc_error_has_error(&err))
+        if(dc_error_has_error(err))
         {
             if(errno == EINTR)
             {
-                dc_error_reset(&err);
+                dc_error_reset(err);
                 break;
             }
-
-            exit_code = 1;
-            goto DONE;
         }
 
-        accept_addr_str = dc_inet_ntoa(&env, accept_addr.sin_addr);  // NOLINT(concurrency-mt-unsafe)
-        accept_port = dc_ntohs(&env, accept_addr.sin_port);
+        accept_addr_str = dc_inet_ntoa(env, accept_addr.sin_addr);  // NOLINT(concurrency-mt-unsafe)
+        accept_port = dc_ntohs(env, accept_addr.sin_port);
         printf("Accepted from %s:%d\n", accept_addr_str, accept_port);
-        copy(&env, &err, fd, opts.fd_out, opts.buffer_size);
+        copy(env, err, fd, opts->fd_out, opts->buffer_size);
 
-        if(dc_error_has_error(&err))
+        if(dc_error_has_error(err))
         {
-            exit_code = 2;
         }
 
         printf("Closing %s:%d\n", accept_addr_str, accept_port);
-        dc_close(&env, &err, fd);
+        dc_close(env, err, fd);
 
-        if(dc_error_has_error(&err))
+        if(dc_error_has_error(err))
         {
-            exit_code = 3;
-            goto DONE;
         }
     }
 }
 
-static _Noreturn void usage(const struct dc_posix_env *env, const char *binary_path)
+static _Noreturn void usage(const struct dc_posix_env *env, struct dc_error *err, const char *binary_path)
 {
+    char *dup_path;
     char *binary_name;
 
-    binary_name = dc_basename(env, binary_name);
+    dup_path = dc_strdup(env, err, binary_path);
+    binary_name = dc_basename(env, dup_path);
 
     // NOLINTBEGIN(cert-err33-c)
     fprintf(stderr, "%s [OPTIONS] [FILE]\n", binary_name);
@@ -351,7 +346,6 @@ static void open_input_socket(const struct dc_posix_env *env, struct dc_error *e
 
 static void open_output_socket(const struct dc_posix_env *env, struct dc_error *err, struct options *opts)
 {
-    int result;
     struct sockaddr_in addr;
 
     opts->fd_out = socket(AF_INET, SOCK_STREAM, 0);
@@ -370,7 +364,7 @@ static void open_output_socket(const struct dc_posix_env *env, struct dc_error *
         goto INET_ADDR_ERROR;
     }
 
-    result = connect(opts->fd_out, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
+    dc_connect(env, err, opts->fd_out, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
 
     if(dc_error_has_error(err))
     {
