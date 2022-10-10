@@ -1,21 +1,19 @@
 #include "conversion.h"
-#include "error.h"
-#include <errno.h>
-#include <inttypes.h>
+#include <dc_posix/dc_inttypes.h>
+#include <dc_posix/dc_stdlib.h>
 #include <limits.h>
 #include <stdint.h>
-#include <stdlib.h>
 
 
-in_port_t parse_port(const char *buff, int radix)
+in_port_t parse_port(const struct dc_posix_env *env, struct dc_error *err, const char *buff, int radix)
 {
     char *end;
     long sl;
     in_port_t port;
     const char *msg;
 
-    errno = 0;
-    sl = strtol(buff, &end, radix);
+    DC_TRACE(env);
+    sl = dc_strtol(env, err, buff, &end, radix);
 
     if(end == buff)
     {
@@ -44,7 +42,7 @@ in_port_t parse_port(const char *buff, int radix)
 
     if(msg)
     {
-        fatal_message(__FILE__, __func__ , __LINE__, msg, 2);
+        DC_ERROR_RAISE_USER(err, msg, 3);
     }
 
     port = (in_port_t)sl;
@@ -53,15 +51,16 @@ in_port_t parse_port(const char *buff, int radix)
 }
 
 
-size_t parse_size_t(const char *buff, int radix)
+size_t parse_size_t(const struct dc_posix_env *env, struct dc_error *err, const char *buff, int radix)
 {
     char *end;
     uintmax_t max;
     size_t ret_val;
     const char *msg;
 
+    DC_TRACE(env);
     errno = 0;
-    max = strtoumax(buff, &end, radix);
+    max = dc_strtoumax(env, err, buff, &end, radix);
 
     if(end == buff)
     {
@@ -75,10 +74,6 @@ size_t parse_size_t(const char *buff, int radix)
     {
         msg = "out of range of type uintmax_t";
     }
-    else if(max > SIZE_MAX)
-    {
-        msg = "greater than SIZE_MAX";
-    }
     else
     {
         msg = NULL;
@@ -86,7 +81,7 @@ size_t parse_size_t(const char *buff, int radix)
 
     if(msg)
     {
-        fatal_message(__FILE__, __func__ , __LINE__, msg, 2);
+        DC_ERROR_RAISE_USER(err, msg, 3);
     }
 
     ret_val = (size_t)max;

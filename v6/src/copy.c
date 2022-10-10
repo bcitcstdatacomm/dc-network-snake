@@ -9,6 +9,7 @@ void copy(const struct dc_posix_env *env, struct dc_error *err, int from_fd, int
     char *buffer;
     ssize_t rbytes;
 
+    DC_TRACE(env);
     buffer = dc_malloc(env, err, count);
 
     if(dc_error_has_error(err))
@@ -22,11 +23,19 @@ void copy(const struct dc_posix_env *env, struct dc_error *err, int from_fd, int
 
         if(dc_error_has_error(err))
         {
-            goto IO_FAIL;
+            goto WRITE_FAIL;
         }
     }
 
-IO_FAIL:
+    if(dc_error_has_error(err))
+    {
+        if(dc_error_is_errno(err, EINTR))
+        {
+            dc_error_reset(err);
+        }
+    }
+
+WRITE_FAIL:
     dc_free(env, buffer, count);
 
 MALLOC_FAIL:

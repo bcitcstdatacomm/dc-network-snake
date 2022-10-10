@@ -1,18 +1,15 @@
 #include "conversion.h"
 #include "copy.h"
-#include "error.h"
 #include <dc_posix/arpa/dc_inet.h>
 #include <dc_posix/dc_fcntl.h>
 #include <dc_posix/dc_libgen.h>
+#include <dc_posix/dc_signal.h>
 #include <dc_posix/dc_stdio.h>
 #include <dc_posix/dc_stdlib.h>
 #include <dc_posix/dc_string.h>
 #include <dc_posix/dc_unistd.h>
 #include <dc_posix/sys/dc_socket.h>
 #include <dc_util/networking.h>
-#include <netinet/in.h>
-#include <signal.h>
-#include <stdbool.h>
 
 
 struct options
@@ -39,7 +36,7 @@ static void open_input_socket(const struct dc_posix_env *env, struct dc_error *e
 static void open_output_socket(const struct dc_posix_env *env, struct dc_error *err, struct options *opts);
 static void handle_client(const struct dc_posix_env *env, struct dc_error *err, struct options *opts);
 static void cleanup(const struct dc_posix_env *env, struct dc_error *err, const struct options *opts);
-static void set_signal_handling(struct sigaction *sa);
+static void set_signal_handling(const struct dc_posix_env *env, struct dc_error *err, struct sigaction *sa);
 static void signal_handler(int sig);
 
 
@@ -53,54 +50,88 @@ static volatile sig_atomic_t running;   // NOLINT(cppcoreguidelines-avoid-non-co
 
 int main(int argc, char *argv[])
 {
-    struct dc_posix_env env;
-    struct dc_error err;
+    struct dc_error *err;
+    struct dc_posix_env *env;
     struct options opts;
     struct sigaction sa;
+    int exit_code;
 
-    dc_posix_env_init(&env, NULL);
-//    dc_posix_env_init(&env, dc_posix_default_tracer);
-    options_init(&env, &opts);
-    parse_arguments(&env, &err, argc, argv, &opts);
+    err = dc_error_create(true);
+
+    if(err == NULL)
+    {
+        exit_code = EXIT_FAILURE;
+        goto ERROR_CREATE;
+    }
+
+    env = dc_posix_env_create(err, true, NULL);
+
+    if(dc_error_has_error(err))
+    {
+        goto ENV_CREATE;
+    }
+
+    options_init(env, &opts);
+    parse_arguments(env, err, argc, argv, &opts);
 
     if(opts.verbose)
     {
-        dc_posix_env_set_trace(&env, dc_posix_default_tracer);
+        dc_posix_env_set_tracer(env, dc_posix_default_tracer);
     }
 
     if(opts.show_help)
     {
-        usage(&env, &err, argv[0]);
+        usage(env, err, argv[0]);
     }
 
-    options_process(&env, &err, &opts);
+    options_process(env, err, &opts);
 
-    set_signal_handling(&sa);
+    if(dc_error_has_error(err))
+    {
+        goto PROCESS_ERROR;
+    }
+
+    set_signal_handling(env, err, &sa);
     running = 1;
 
     if(opts.ip_in)
     {
-        handle_client(&env, &err, &opts);
+        handle_client(env, err, &opts);
     }
     else
     {
-        copy(&env, &err, opts.fd_in, opts.fd_out, opts.buffer_size);
-
-        if(dc_error_has_error(&err))
-        {
-            exit_code = 4;
-            goto DONE;
-        }
+        copy(env, err, opts.fd_in, opts.fd_out, opts.buffer_size);
     }
 
-    DONE:
-    cleanup(&env, &err, &opts);
+    PROCESS_ERROR:
+    cleanup(env, err, &opts);
+    free(env);
+    ENV_CREATE:
 
-    return EXIT_SUCCESS;
+    if(dc_error_has_error(err))
+    {
+        const char *message;
+
+        message = dc_error_get_message(err);
+        fprintf(stderr, "Error: %s\n", message);      // NOLINT(cert-err33-c)
+        exit_code = EXIT_FAILURE;
+    }
+    else
+    {
+        exit_code = EXIT_SUCCESS;
+    }
+
+    dc_error_reset(err);
+    free(err);
+    ERROR_CREATE:
+
+    return exit_code;
 }
 
 static void handle_client(const struct dc_posix_env *env, struct dc_error *err, struct options *opts)
 {
+    DC_TRACE(env);
+
     while(running)
     {
         int fd;
@@ -114,26 +145,22 @@ static void handle_client(const struct dc_posix_env *env, struct dc_error *err, 
 
         if(dc_error_has_error(err))
         {
-            if(errno == EINTR)
+            if(dc_error_is_errno(err, EINTR))
             {
                 dc_error_reset(err);
-                break;
             }
+
+            goto DONE;
         }
 
         accept_addr_str = dc_inet_ntoa(env, accept_addr.sin_addr);  // NOLINT(concurrency-mt-unsafe)
         accept_port = dc_ntohs(env, accept_addr.sin_port);
         printf("Accepted from %s:%d\n", accept_addr_str, accept_port);
         copy(env, err, fd, opts->fd_out, opts->buffer_size);
-
-        if(dc_error_has_error(err))
-        {
-        }
-
         printf("Closing %s:%d\n", accept_addr_str, accept_port);
         dc_close(env, err, fd);
 
-        if(dc_error_has_error(err))
+        DONE:
         {
         }
     }
@@ -144,6 +171,7 @@ static _Noreturn void usage(const struct dc_posix_env *env, struct dc_error *err
     char *dup_path;
     char *binary_name;
 
+    DC_TRACE(env);
     dup_path = dc_strdup(env, err, binary_path);
     binary_name = dc_basename(env, dup_path);
 
@@ -158,7 +186,7 @@ static _Noreturn void usage(const struct dc_posix_env *env, struct dc_error *err
     fprintf(stderr, "-h                 help\n");
     // NOLINTEND(cert-err33-c)
 
-    exit(EXIT_SUCCESS);
+    exit(EXIT_SUCCESS);     // NOLINT(concurrency-mt-unsafe)
 }
 
 static void options_init(const struct dc_posix_env *env, struct options *opts)
@@ -179,7 +207,7 @@ static void parse_arguments(const struct dc_posix_env *env, struct dc_error *err
 
     DC_TRACE(env);
 
-    while((c = dc_getopt(env, err, argc, argv, ":i:o:p:P:b:v:h")) != -1)   // NOLINT(concurrency-mt-unsafe)
+    while((c = dc_getopt(env, err, argc, argv, ":i:o:p:P:b:vh")) != -1)   // NOLINT(concurrency-mt-unsafe)
     {
         switch(c)
         {
@@ -195,17 +223,32 @@ static void parse_arguments(const struct dc_posix_env *env, struct dc_error *err
             }
             case 'p':
             {
-                opts->port_in = parse_port(optarg, 10); // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+                opts->port_in = parse_port(env, err, optarg, 10); // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+
+                if(dc_error_has_error(err))
+                {
+                }
+
                 break;
             }
             case 'P':
             {
-                opts->port_out = parse_port(optarg, 10); // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+                opts->port_out = parse_port(env, err, optarg, 10); // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+
+                if(dc_error_has_error(err))
+                {
+                }
+
                 break;
             }
             case 'b':
             {
-                opts->buffer_size = parse_size_t(optarg, 10); // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+                opts->buffer_size = parse_size_t(env, err, optarg, 10); // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+
+                if(dc_error_has_error(err))
+                {
+                }
+
                 break;
             }
             case 'v':
@@ -220,12 +263,13 @@ static void parse_arguments(const struct dc_posix_env *env, struct dc_error *err
             }
             case ':':
             {
-                fatal_message(__FILE__, __func__ , __LINE__, "\"Option requires an operand\"", 5); // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+                DC_ERROR_RAISE_USER(err, "", 1);
                 break;
             }
             case '?':
             {
-                fatal_message(__FILE__, __func__ , __LINE__, "Unknown", 6); // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+                DC_ERROR_RAISE_USER(err, "", 2);
+                break;
             }
             default:
             {
@@ -291,6 +335,7 @@ static void options_process(const struct dc_posix_env *env, struct dc_error *err
 
 static void open_input_file(const struct dc_posix_env *env, struct dc_error *err, struct options *opts)
 {
+    DC_TRACE(env);
     opts->fd_in = dc_open(env, err, opts->file_name, O_RDONLY);
 }
 
@@ -298,6 +343,7 @@ static void open_input_socket(const struct dc_posix_env *env, struct dc_error *e
 {
     struct sockaddr_in addr;
 
+    DC_TRACE(env);
     opts->fd_in = dc_socket(env, err, AF_INET, SOCK_STREAM, 0);
 
     if(dc_error_has_error(err))
@@ -348,6 +394,7 @@ static void open_output_socket(const struct dc_posix_env *env, struct dc_error *
 {
     struct sockaddr_in addr;
 
+    DC_TRACE(env);
     opts->fd_out = socket(AF_INET, SOCK_STREAM, 0);
 
     if(dc_error_has_error(err))
@@ -356,7 +403,7 @@ static void open_output_socket(const struct dc_posix_env *env, struct dc_error *
     }
 
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(opts->port_out);
+    addr.sin_port = dc_htons(env, opts->port_out);
     addr.sin_addr.s_addr = dc_inet_addr(env, err, opts->ip_out);
 
     if(dc_error_has_error(err))
@@ -394,19 +441,13 @@ static void cleanup(const struct dc_posix_env *env, struct dc_error *err, const 
 }
 
 
-static void set_signal_handling(struct sigaction *sa)
+static void set_signal_handling(const struct dc_posix_env *env, struct dc_error *err, struct sigaction *sa)
 {
-    int result;
-
-    sigemptyset(&sa->sa_mask);
+    DC_TRACE(env);
+    dc_sigemptyset(env, err, &sa->sa_mask);
     sa->sa_flags = 0;
     sa->sa_handler = signal_handler;
-    result = sigaction(SIGINT, sa, NULL);
-
-    if(result == -1)
-    {
-        fatal_errno(__FILE__, __func__ , __LINE__, errno, 2);
-    }
+    dc_sigaction(env, err, SIGINT, sa, NULL);
 }
 
 
