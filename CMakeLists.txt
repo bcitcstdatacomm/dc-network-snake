@@ -135,7 +135,6 @@ set(CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS},-android-cloexec-socket")
 set(CMAKE_C_CLANG_TIDY clang-tidy -checks=${CLANG_TIDY_CHECKS};--quiet)
 
 add_executable(dc-network-snake ${SOURCE_LIST})
-add_dependencies(dc-network-snake doxygen)
 
 find_library(LIBDC_ERROR dc_error REQUIRED)
 find_library(LIBDC_POSIX dc_posix REQUIRED)
@@ -143,3 +142,8 @@ find_library(LIBDC_UTIL dc_util REQUIRED)
 target_link_libraries(dc-network-snake PRIVATE ${LIBDC_ERROR})
 target_link_libraries(dc-network-snake PRIVATE ${LIBDC_POSIX})
 target_link_libraries(dc-network-snake PRIVATE ${LIBDC_UTIL})
+
+set_target_properties(dc-network-snake PROPERTIES OUTPUT_NAME "dcnetworksnake")
+install(TARGETS dc-network-snake DESTINATION bin)
+
+add_dependencies(dc-network-snake doxygen)
