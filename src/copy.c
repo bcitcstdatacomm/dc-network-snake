@@ -19,6 +19,17 @@ void copy(const struct dc_posix_env *env, struct dc_error *err, int from_fd, int
 
     while((rbytes = dc_read(env, err, from_fd, buffer, count)) > 0)
     {
+        if(dc_error_has_error(err))
+        {
+            if(dc_error_is_errno(err, EINTR))
+            {
+                dc_error_reset(err);
+            }
+
+            goto READ_FAIL;
+            break;
+        }
+
         dc_write(env, err, to_fd, buffer, rbytes);
 
         if(dc_error_has_error(err))
@@ -27,18 +38,11 @@ void copy(const struct dc_posix_env *env, struct dc_error *err, int from_fd, int
         }
     }
 
-    if(dc_error_has_error(err))
-    {
-        if(dc_error_is_errno(err, EINTR))
-        {
-            dc_error_reset(err);
-        }
-    }
-
-WRITE_FAIL:
+    READ_FAIL:
+    WRITE_FAIL:
     dc_free(env, buffer, count);
 
-MALLOC_FAIL:
+    MALLOC_FAIL:
     {
     }
 }
