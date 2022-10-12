@@ -146,6 +146,12 @@ endif ()
 
 add_executable(dc-network-snake ${SOURCE_LIST} ${HEADER_LIST})
 target_include_directories(dc-network-snake PRIVATE include)
+target_include_directories(dc-network-snake PRIVATE /usr/local/include)
+target_link_directories(dc-network-snake PRIVATE /usr/local/lib)
+
+if (NOT APPLE)
+    target_include_directories(dc-network-snake PRIVATE /usr/include)
+endif ()
 
 set_target_properties(dc-network-snake PROPERTIES
         VERSION ${PROJECT_VERSION}

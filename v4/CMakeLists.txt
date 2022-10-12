@@ -155,6 +155,12 @@ set_target_properties(dc-network-snake PROPERTIES
 
 set_target_properties(dc-network-snake PROPERTIES OUTPUT_NAME "dcnetworksnake")
 install(TARGETS dc-network-snake DESTINATION bin)
+target_include_directories(dc-network-snake PRIVATE /usr/local/include)
+target_link_directories(dc-network-snake PRIVATE /usr/local/lib)
+
+if (NOT APPLE)
+    target_include_directories(dc-network-snake PRIVATE /usr/include)
+endif ()
 
 add_dependencies(dc-network-snake doxygen)
 
