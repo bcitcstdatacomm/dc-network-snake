@@ -19,6 +19,7 @@ struct options
     char *file_name;
     char *ip_in;
     char *ip_out;
+    char *ip_from;
     in_port_t port_in;
     in_port_t port_out;
     int fd_in;
@@ -135,33 +136,30 @@ static void handle_client(const struct dc_posix_env *env, struct dc_error *err, 
     while(running)
     {
         int fd;
-        struct sockaddr_in accept_addr;
         socklen_t accept_addr_len;
-        char *accept_addr_str;
-        in_port_t accept_port;
+        struct sockaddr_in accept_addr;
 
         accept_addr_len = sizeof(accept_addr);
         fd = dc_accept(env, err, opts->fd_in, (struct sockaddr *)&accept_addr, &accept_addr_len);
 
-        if(dc_error_has_error(err))
+        if(dc_error_has_no_error(err))
+        {
+            char *accept_addr_str;
+            in_port_t accept_port;
+
+            accept_addr_str = dc_inet_ntoa(env, accept_addr.sin_addr);  // NOLINT(concurrency-mt-unsafe)
+            accept_port = dc_ntohs(env, accept_addr.sin_port);
+            printf("Accepted from %s:%d\n", accept_addr_str, accept_port);
+            copy(env, err, fd, opts->fd_out, opts->buffer_size);
+            printf("Closing %s:%d\n", accept_addr_str, accept_port);
+            dc_dc_close(env, err, fd);
+        }
+        else
         {
             if(dc_error_is_errno(err, EINTR))
             {
                 dc_error_reset(err);
             }
-
-            goto DONE;
-        }
-
-        accept_addr_str = dc_inet_ntoa(env, accept_addr.sin_addr);  // NOLINT(concurrency-mt-unsafe)
-        accept_port = dc_ntohs(env, accept_addr.sin_port);
-        printf("Accepted from %s:%d\n", accept_addr_str, accept_port);
-        copy(env, err, fd, opts->fd_out, opts->buffer_size);
-        printf("Closing %s:%d\n", accept_addr_str, accept_port);
-        dc_close(env, err, fd);
-
-        DONE:
-        {
         }
     }
 }
@@ -179,6 +177,7 @@ static _Noreturn void usage(const struct dc_posix_env *env, struct dc_error *err
     fprintf(stderr, "%s [OPTIONS] [FILE]\n", binary_name);
     fprintf(stderr, "-i ip address      input IP address\n");
     fprintf(stderr, "-o ip address      output IP address\n");
+    fprintf(stderr, "-e ip address      from IP address\n");
     fprintf(stderr, "-p port            input port\n");
     fprintf(stderr, "-P port            output port\n");
     fprintf(stderr, "-b buffer size     size of the read/write buffer\n");
@@ -207,7 +206,7 @@ static void parse_arguments(const struct dc_posix_env *env, struct dc_error *err
 
     DC_TRACE(env);
 
-    while((c = dc_getopt(env, err, argc, argv, ":i:o:p:P:b:vh")) != -1)   // NOLINT(concurrency-mt-unsafe)
+    while((c = dc_getopt(env, err, argc, argv, ":i:o:e:p:P:b:vh")) != -1)   // NOLINT(concurrency-mt-unsafe)
     {
         switch(c)
         {
@@ -219,6 +218,11 @@ static void parse_arguments(const struct dc_posix_env *env, struct dc_error *err
             case 'o':
             {
                 opts->ip_out = optarg;
+                break;
+            }
+            case 'e':
+            {
+                opts->ip_from = optarg;
                 break;
             }
             case 'p':
@@ -402,6 +406,28 @@ static void open_output_socket(const struct dc_posix_env *env, struct dc_error *
         goto SOCKET_ERROR;
     }
 
+    if(opts->ip_from)
+    {
+        struct sockaddr_in from_addr;
+        socklen_t from_addr_len;
+
+        from_addr_len = sizeof(from_addr);
+        from_addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = dc_inet_addr(env, err, opts->ip_from);
+
+        if(dc_error_has_error(err))
+        {
+            goto BIND_INET_ADDR_ERROR;
+        }
+
+        dc_bind(env, err, opts->fd_out, (struct sockaddr *)&from_addr, from_addr_len);
+
+        if(dc_error_has_error(err))
+        {
+            goto BIND_ERROR;
+        }
+    }
+
     addr.sin_family = AF_INET;
     addr.sin_port = dc_htons(env, opts->port_out);
     addr.sin_addr.s_addr = dc_inet_addr(env, err, opts->ip_out);
@@ -418,8 +444,13 @@ static void open_output_socket(const struct dc_posix_env *env, struct dc_error *
         goto CONNECT_ERROR;
     }
 
+    return;
+    
     CONNECT_ERROR:
     INET_ADDR_ERROR:
+    BIND_ERROR:
+    BIND_INET_ADDR_ERROR:
+    dc_close(env, err, opts->fd_out);
     SOCKET_ERROR:
     {
     }
