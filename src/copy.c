@@ -1,10 +1,9 @@
 #include "copy.h"
-#include <dc_error/error.h>
-#include <dc_posix/dc_stdlib.h>
+#include <dc_c/dc_stdlib.h>
 #include <dc_posix/dc_unistd.h>
 
 
-void copy(const struct dc_posix_env *env, struct dc_error *err, int from_fd, int to_fd, size_t count)
+void copy(const struct dc_env *env, struct dc_error *err, int from_fd, int to_fd, size_t count)
 {
     char *buffer;
     ssize_t rbytes;
@@ -40,7 +39,7 @@ void copy(const struct dc_posix_env *env, struct dc_error *err, int from_fd, int
 
     READ_FAIL:
     WRITE_FAIL:
-    dc_free(env, buffer, count);
+    dc_free(env, buffer);
 
     MALLOC_FAIL:
     {

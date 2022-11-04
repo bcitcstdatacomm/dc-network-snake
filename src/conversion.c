@@ -1,11 +1,10 @@
 #include "conversion.h"
-#include <dc_posix/dc_inttypes.h>
-#include <dc_posix/dc_stdlib.h>
+#include <dc_c/dc_inttypes.h>
+#include <dc_c/dc_stdlib.h>
 #include <limits.h>
-#include <stdint.h>
 
 
-in_port_t parse_port(const struct dc_posix_env *env, struct dc_error *err, const char *buff, int radix)
+in_port_t parse_port(const struct dc_env *env, struct dc_error *err, const char *buff, int radix)
 {
     char *end;
     long sl;
@@ -51,7 +50,7 @@ in_port_t parse_port(const struct dc_posix_env *env, struct dc_error *err, const
 }
 
 
-size_t parse_size_t(const struct dc_posix_env *env, struct dc_error *err, const char *buff, int radix)
+size_t parse_size_t(const struct dc_env *env, struct dc_error *err, const char *buff, int radix)
 {
     char *end;
     uintmax_t max;

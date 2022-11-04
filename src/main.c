@@ -1,15 +1,17 @@
-#include "conversion.h"
 #include "copy.h"
+#include "conversion.h"
+#include <dc_c/dc_stdlib.h>
+#include <dc_c/dc_string.h>
 #include <dc_posix/arpa/dc_inet.h>
 #include <dc_posix/dc_fcntl.h>
-#include <dc_posix/dc_libgen.h>
 #include <dc_posix/dc_signal.h>
-#include <dc_posix/dc_stdio.h>
-#include <dc_posix/dc_stdlib.h>
 #include <dc_posix/dc_string.h>
 #include <dc_posix/dc_unistd.h>
 #include <dc_posix/sys/dc_socket.h>
+#include <dc_posix_xsi/dc_libgen.h>
 #include <dc_util/networking.h>
+#include <fcntl.h>
+#include <stdio.h>
 
 
 struct options
@@ -28,16 +30,16 @@ struct options
 };
 
 
-static _Noreturn void usage(const struct dc_posix_env *env, struct dc_error *err, const char *binary_path);
-static void options_init(const struct dc_posix_env *env, struct options *opts);
-static void parse_arguments(const struct dc_posix_env *env, struct dc_error *err, int argc, char *argv[], struct options *opts);
-static void options_process(const struct dc_posix_env *env, struct dc_error *err, struct options *opts);
-static void open_input_file(const struct dc_posix_env *env, struct dc_error *err, struct options *opts);
-static void open_input_socket(const struct dc_posix_env *env, struct dc_error *err, struct options *opts);
-static void open_output_socket(const struct dc_posix_env *env, struct dc_error *err, struct options *opts);
-static void handle_client(const struct dc_posix_env *env, struct dc_error *err, struct options *opts);
-static void cleanup(const struct dc_posix_env *env, struct dc_error *err, const struct options *opts);
-static void set_signal_handling(const struct dc_posix_env *env, struct dc_error *err, struct sigaction *sa);
+static _Noreturn void usage(const struct dc_env *env, struct dc_error *err, const char *binary_path);
+static void options_init(const struct dc_env *env, struct options *opts);
+static void parse_arguments(const struct dc_env *env, struct dc_error *err, int argc, char *argv[], struct options *opts);
+static void options_process(const struct dc_env *env, struct dc_error *err, struct options *opts);
+static void open_input_file(const struct dc_env *env, struct dc_error *err, struct options *opts);
+static void open_input_socket(const struct dc_env *env, struct dc_error *err, struct options *opts);
+static void open_output_socket(const struct dc_env *env, struct dc_error *err, struct options *opts);
+static void handle_client(const struct dc_env *env, struct dc_error *err, struct options *opts);
+static void cleanup(const struct dc_env *env, struct dc_error *err, const struct options *opts);
+static void set_signal_handling(const struct dc_env *env, struct dc_error *err, struct sigaction *sa);
 static void signal_handler(int sig);
 
 
@@ -52,7 +54,7 @@ static volatile sig_atomic_t running;   // NOLINT(cppcoreguidelines-avoid-non-co
 int main(int argc, char *argv[])
 {
     struct dc_error *err;
-    struct dc_posix_env *env;
+    struct dc_env *env;
     struct options opts;
     struct sigaction sa;
     int exit_code;
@@ -65,7 +67,7 @@ int main(int argc, char *argv[])
         goto ERROR_CREATE;
     }
 
-    env = dc_posix_env_create(err, true, NULL);
+    env = dc_env_create(err, true, NULL);
 
     if(dc_error_has_error(err))
     {
@@ -77,7 +79,7 @@ int main(int argc, char *argv[])
 
     if(opts.verbose)
     {
-        dc_posix_env_set_tracer(env, dc_posix_default_tracer);
+        dc_env_set_tracer(env, dc_env_default_tracer);
     }
 
     if(opts.show_help)
@@ -129,7 +131,7 @@ int main(int argc, char *argv[])
     return exit_code;
 }
 
-static void handle_client(const struct dc_posix_env *env, struct dc_error *err, struct options *opts)
+static void handle_client(const struct dc_env *env, struct dc_error *err, struct options *opts)
 {
     DC_TRACE(env);
 
@@ -152,7 +154,7 @@ static void handle_client(const struct dc_posix_env *env, struct dc_error *err, 
             printf("Accepted from %s:%d\n", accept_addr_str, accept_port);
             copy(env, err, fd, opts->fd_out, opts->buffer_size);
             printf("Closing %s:%d\n", accept_addr_str, accept_port);
-            dc_dc_close(env, err, fd);
+            dc_close(env, err, fd);
         }
         else
         {
@@ -164,7 +166,7 @@ static void handle_client(const struct dc_posix_env *env, struct dc_error *err, 
     }
 }
 
-static _Noreturn void usage(const struct dc_posix_env *env, struct dc_error *err, const char *binary_path)
+static _Noreturn void usage(const struct dc_env *env, struct dc_error *err, const char *binary_path)
 {
     char *dup_path;
     char *binary_name;
@@ -188,7 +190,7 @@ static _Noreturn void usage(const struct dc_posix_env *env, struct dc_error *err
     exit(EXIT_SUCCESS);     // NOLINT(concurrency-mt-unsafe)
 }
 
-static void options_init(const struct dc_posix_env *env, struct options *opts)
+static void options_init(const struct dc_env *env, struct options *opts)
 {
     DC_TRACE(env);
     dc_memset(env, opts, 0, sizeof(struct options));
@@ -200,13 +202,13 @@ static void options_init(const struct dc_posix_env *env, struct options *opts)
 }
 
 
-static void parse_arguments(const struct dc_posix_env *env, struct dc_error *err, int argc, char *argv[], struct options *opts)
+static void parse_arguments(const struct dc_env *env, struct dc_error *err, int argc, char *argv[], struct options *opts)
 {
     int c;
 
     DC_TRACE(env);
 
-    while((c = dc_getopt(env, err, argc, argv, ":i:o:e:p:P:b:vh")) != -1)   // NOLINT(concurrency-mt-unsafe)
+    while((c = dc_getopt(env, argc, argv, ":i:o:e:p:P:b:vh")) != -1)   // NOLINT(concurrency-mt-unsafe)
     {
         switch(c)
         {
@@ -289,7 +291,7 @@ static void parse_arguments(const struct dc_posix_env *env, struct dc_error *err
 }
 
 
-static void options_process(const struct dc_posix_env *env, struct dc_error *err, struct options *opts)
+static void options_process(const struct dc_env *env, struct dc_error *err, struct options *opts)
 {
     DC_TRACE(env);
 
@@ -337,13 +339,13 @@ static void options_process(const struct dc_posix_env *env, struct dc_error *err
     }
 }
 
-static void open_input_file(const struct dc_posix_env *env, struct dc_error *err, struct options *opts)
+static void open_input_file(const struct dc_env *env, struct dc_error *err, struct options *opts)
 {
     DC_TRACE(env);
     opts->fd_in = dc_open(env, err, opts->file_name, O_RDONLY);
 }
 
-static void open_input_socket(const struct dc_posix_env *env, struct dc_error *err, struct options *opts)
+static void open_input_socket(const struct dc_env *env, struct dc_error *err, struct options *opts)
 {
     struct sockaddr_in addr;
 
@@ -394,7 +396,7 @@ static void open_input_socket(const struct dc_posix_env *env, struct dc_error *e
     }
 }
 
-static void open_output_socket(const struct dc_posix_env *env, struct dc_error *err, struct options *opts)
+static void open_output_socket(const struct dc_env *env, struct dc_error *err, struct options *opts)
 {
     struct sockaddr_in addr;
 
@@ -456,7 +458,7 @@ static void open_output_socket(const struct dc_posix_env *env, struct dc_error *
     }
 }
 
-static void cleanup(const struct dc_posix_env *env, struct dc_error *err, const struct options *opts)
+static void cleanup(const struct dc_env *env, struct dc_error *err, const struct options *opts)
 {
     DC_TRACE(env);
 
@@ -472,7 +474,7 @@ static void cleanup(const struct dc_posix_env *env, struct dc_error *err, const 
 }
 
 
-static void set_signal_handling(const struct dc_posix_env *env, struct dc_error *err, struct sigaction *sa)
+static void set_signal_handling(const struct dc_env *env, struct dc_error *err, struct sigaction *sa)
 {
     DC_TRACE(env);
     dc_sigemptyset(env, err, &sa->sa_mask);

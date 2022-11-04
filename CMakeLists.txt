@@ -163,11 +163,17 @@ set_target_properties(dc-network-snake PROPERTIES
         SOVERSION ${PROJECT_VERSION_MAJOR})
 
 find_library(LIBDC_ERROR dc_error REQUIRED)
+find_library(LIBDC_ENV dc_env REQUIRED)
+find_library(LIBDC_C dc_c REQUIRED)
 find_library(LIBDC_POSIX dc_posix REQUIRED)
+find_library(LIBDC_POSIX_XSI dc_posix_xsi REQUIRED)
 find_library(LIBDC_UTIL dc_util REQUIRED)
 
 target_link_libraries(dc-network-snake PUBLIC ${LIBDC_ERROR})
+target_link_libraries(dc-network-snake PUBLIC ${LIBDC_ENV})
+target_link_libraries(dc-network-snake PUBLIC ${LIBDC_C})
 target_link_libraries(dc-network-snake PUBLIC ${LIBDC_POSIX})
+target_link_libraries(dc-network-snake PUBLIC ${LIBDC_POSIX_XSI})
 target_link_libraries(dc-network-snake PUBLIC ${LIBDC_UTIL})
 
 set_target_properties(dc-network-snake PROPERTIES OUTPUT_NAME "dcnetworksnake")
