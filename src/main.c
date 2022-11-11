@@ -43,9 +43,11 @@ static void set_signal_handling(const struct dc_env *env, struct dc_error *err, 
 static void signal_handler(int sig);
 
 
+// NOLINTBEGIN(modernize-macro-to-enum)
 #define DEFAULT_BUF_SIZE 1024
 #define DEFAULT_PORT 5000
 #define BACKLOG 5
+//NOLINTEND(modernize-macro-to-enum)
 
 
 static volatile sig_atomic_t running;   // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
