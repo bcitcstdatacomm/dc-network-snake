@@ -202,6 +202,7 @@ find_library(LIBDC_C dc_c REQUIRED)
 find_library(LIBDC_POSIX dc_posix REQUIRED)
 find_library(LIBDC_POSIX_XSI dc_posix_xsi REQUIRED)
 find_library(LIBDC_UTIL dc_util REQUIRED)
+find_library(LIBBSD bsd)
 
 target_link_libraries(dc-network-snake PUBLIC ${LIBDC_ERROR})
 target_link_libraries(dc-network-snake PUBLIC ${LIBDC_ENV})
@@ -209,6 +210,10 @@ target_link_libraries(dc-network-snake PUBLIC ${LIBDC_C})
 target_link_libraries(dc-network-snake PUBLIC ${LIBDC_POSIX})
 target_link_libraries(dc-network-snake PUBLIC ${LIBDC_POSIX_XSI})
 target_link_libraries(dc-network-snake PUBLIC ${LIBDC_UTIL})
+
+if(LIBBSD)
+    target_link_libraries(dc-network-snake PUBLIC ${LIBBSD})
+endif()
 
 set_target_properties(dc-network-snake PROPERTIES OUTPUT_NAME "dcnetworksnake")
 install(TARGETS dc-network-snake DESTINATION bin)
